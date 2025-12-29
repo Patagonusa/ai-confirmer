@@ -64,7 +64,7 @@ function renderLeadsTable() {
         );
     }
     if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:#a1a1aa">No leads found</td></tr>'; return; }
-    tbody.innerHTML = filtered.map(l => '<tr><td>'+(l.appointmentTime||'-')+'</td><td>'+(l.appointmentDate||'-')+'</td><td>'+(l.firstName||'-')+'</td><td>'+(l.lastName||'-')+'</td><td>'+(l.phone||l.altPhone||'-')+'</td><td>'+(l.product||'-')+'</td><td><span class="status-badge">'+(l.status||'-')+'</span></td></tr>').join('');
+    tbody.innerHTML = filtered.map(l => '<tr><td>'+(l.appointmentTime||'-')+'</td><td>'+(l.appointmentDate||'-')+'</td><td>'+(l.fullName || ((l.firstName||'')+ ' ' + (l.lastName||'')).trim() || '-')+'</td><td>'+(l.phone||l.altPhone||'-')+'</td><td>'+(l.product||'-')+'</td><td><span class="status-badge">'+(l.status||'-')+'</span></td></tr>').join('');
 }
 
 function filterLeadsTable() { renderLeadsTable(); }
@@ -89,11 +89,14 @@ async function loadCallHistory() {
 function renderCallHistory() {
     const tbody = document.getElementById('callHistory');
     document.getElementById('historyCount').textContent = callHistoryData.length + ' calls';
-    if (!callHistoryData.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:#a1a1aa">No call history</td></tr>'; return; }
+    if (!callHistoryData.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#a1a1aa">No call history</td></tr>'; return; }
     tbody.innerHTML = callHistoryData.map((c, idx) => {
         const rec = c.recordingUrl ? '<a href="'+c.recordingUrl+'" target="_blank" class="recording-link">Play</a>' : '-';
-        const trans = c.transcript ? '<button class="transcript-btn" onclick="showTranscript('+idx+')">View</button>' : '-';
-        return '<tr><td>'+new Date(c.timestamp).toLocaleString()+'</td><td>'+c.name+'</td><td>'+c.phone+'</td><td><span class="status-badge '+c.status+'">'+c.status+'</span></td><td>'+(c.duration?c.duration+'s':'-')+'</td><td>'+rec+'</td><td>'+trans+'</td></tr>';
+        const trans = c.transcript && c.transcript.length > 0 ? '<button class="transcript-btn" onclick="showTranscript('+idx+')">View</button>' : '-';
+        const appDate = c.appointmentDate ? new Date(c.appointmentDate).toLocaleDateString() : '-';
+        const appTime = c.appointmentTime ? c.appointmentTime.substring(0,5) : '-';
+        const statusClass = c.status === 'completed' ? 'completed' : (c.status === 'no-answer' || c.status === 'busy' || c.status === 'failed' ? 'failed' : '');
+        return '<tr><td>'+(c.name||'-')+'</td><td>'+appDate+' '+appTime+'</td><td>'+(c.product||'-')+'</td><td>'+(c.phone||'-')+'</td><td><span class="status-badge '+statusClass+'">'+c.status+'</span></td><td>'+(c.duration?c.duration+'s':'-')+'</td><td>'+rec+'</td><td>'+trans+'</td></tr>';
     }).join('');
 }
 
@@ -143,7 +146,7 @@ async function updateStatus() {
         document.getElementById('progressFill').style.width = progress + '%';
         if (data.currentLead && data.running) {
             document.getElementById('currentCall').classList.add('active');
-            document.getElementById('currentName').textContent = (data.currentLead.firstName||'') + ' ' + (data.currentLead.lastName||'');
+            document.getElementById('currentName').textContent = data.currentLead.fullName || ((data.currentLead.firstName||'') + ' ' + (data.currentLead.lastName||'')).trim();
             document.getElementById('currentPhone').textContent = data.currentLead.phone || data.currentLead.altPhone || '-';
             document.getElementById('currentTime').textContent = data.currentLead.appointmentTime || '-';
             document.getElementById('currentProduct').textContent = data.currentLead.product || '-';

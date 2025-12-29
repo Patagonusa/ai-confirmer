@@ -126,22 +126,33 @@ app.get('/api/leads', async (req, res) => {
       options: { top: 1000, skip: 0 }
     });
 
-    const leads = data.data.map(row => ({
-      recordId: row['3']?.value,
-      firstName: row['6']?.value || '',
-      lastName: row['7']?.value || '',
-      phone: row['109']?.value || '',
-      altPhone: row['108']?.value || '',
-      status: row['9']?.value || '',
-      appointmentDate: row['11']?.value,
-      appointmentTime: row['126']?.value,
-      product: row['15']?.value || '',
-      address: row['94']?.value || '',
-      street: row['95']?.value || '',
-      city: row['97']?.value || '',
-      state: row['98']?.value || '',
-      zip: row['99']?.value || ''
-    }));
+    // Parse name into first/last - field 6 contains full name like "John Smith / Jane Smith"
+    const leads = data.data.map(row => {
+      const fullName = row['6']?.value || '';
+      // Split on / or & to get primary contact, then split into first/last
+      const primaryName = fullName.split(/[/&]/)[0].trim();
+      const nameParts = primaryName.split(/\s+/);
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      return {
+        recordId: row['3']?.value,
+        fullName: primaryName,
+        firstName,
+        lastName,
+        phone: row['109']?.value || '',
+        altPhone: row['108']?.value || '',
+        status: row['9']?.value || '',
+        appointmentDate: row['11']?.value,
+        appointmentTime: row['126']?.value,
+        product: row['15']?.value || '',
+        address: row['94']?.value || '',
+        street: row['95']?.value || '',
+        city: row['97']?.value || '',
+        state: row['98']?.value || '',
+        zip: row['99']?.value || ''
+      };
+    });
 
     // Apply time filter if provided
     const { timeFrom, timeTo } = req.query;
@@ -201,21 +212,31 @@ app.post('/api/campaign/start', async (req, res) => {
       sortBy: [{ fieldId: 126, order: 'ASC' }]
     });
 
-    const leads = data.data.map(row => ({
-      recordId: row['3']?.value,
-      firstName: row['6']?.value || '',
-      lastName: row['7']?.value || '',
-      phone: row['109']?.value || '',
-      altPhone: row['108']?.value || '',
-      status: row['9']?.value || '',
-      appointmentDate: row['11']?.value,
-      appointmentTime: row['126']?.value,
-      product: row['15']?.value || '',
-      street: row['95']?.value || '',
-      city: row['97']?.value || '',
-      state: row['98']?.value || '',
-      zip: row['99']?.value || ''
-    }));
+    // Parse name into first/last
+    const leads = data.data.map(row => {
+      const fullName = row['6']?.value || '';
+      const primaryName = fullName.split(/[/&]/)[0].trim();
+      const nameParts = primaryName.split(/\s+/);
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      return {
+        recordId: row['3']?.value,
+        fullName: primaryName,
+        firstName,
+        lastName,
+        phone: row['109']?.value || '',
+        altPhone: row['108']?.value || '',
+        status: row['9']?.value || '',
+        appointmentDate: row['11']?.value,
+        appointmentTime: row['126']?.value,
+        product: row['15']?.value || '',
+        street: row['95']?.value || '',
+        city: row['97']?.value || '',
+        state: row['98']?.value || '',
+        zip: row['99']?.value || ''
+      };
+    });
 
     // Initialize campaign
     activeCampaign.running = true;
@@ -266,7 +287,10 @@ async function processNextCall() {
     console.log(`Skipping lead ${lead.recordId} - invalid phone: ${phone}`);
     callHistory.push({
       recordId: lead.recordId,
-      name: `${lead.firstName} ${lead.lastName}`,
+      name: lead.fullName || `${lead.firstName} ${lead.lastName}`.trim(),
+      appointmentDate: lead.appointmentDate,
+      appointmentTime: lead.appointmentTime,
+      product: lead.product,
       phone: lead.phone,
       status: 'skipped',
       reason: 'Invalid phone number',
@@ -285,7 +309,10 @@ async function processNextCall() {
 
     callHistory.push({
       recordId: lead.recordId,
-      name: `${lead.firstName} ${lead.lastName}`,
+      name: lead.fullName || `${lead.firstName} ${lead.lastName}`.trim(),
+      appointmentDate: lead.appointmentDate,
+      appointmentTime: lead.appointmentTime,
+      product: lead.product,
       phone,
       status: callResult.status,
       callSid: callResult.callSid,
@@ -301,7 +328,10 @@ async function processNextCall() {
     console.error(`Error calling lead ${lead.recordId}:`, error);
     callHistory.push({
       recordId: lead.recordId,
-      name: `${lead.firstName} ${lead.lastName}`,
+      name: lead.fullName || `${lead.firstName} ${lead.lastName}`.trim(),
+      appointmentDate: lead.appointmentDate,
+      appointmentTime: lead.appointmentTime,
+      product: lead.product,
       phone,
       status: 'error',
       error: error.message,
@@ -379,11 +409,14 @@ app.post('/api/voice/status', (req, res) => {
     call.status = CallStatus;
     call.duration = CallDuration;
 
-    if (CallStatus === 'completed' && CallDuration > 30) {
-      // Likely a successful call
-      activeCampaign.confirmed++;
-    } else if (CallStatus === 'no-answer' || CallStatus === 'busy') {
+    // Don't auto-confirm - wait for actual conversation outcome
+    // Status will be updated by AI agent via tool call
+    if (CallStatus === 'no-answer' || CallStatus === 'busy' || CallStatus === 'failed') {
       activeCampaign.noAnswer++;
+      // Add to retry queue if configured
+      if (call && call.recordId) {
+        addToRetryQueue(call.recordId, CallStatus);
+      }
     }
   }
 
@@ -577,6 +610,25 @@ app.post('/api/sms/incoming', (req, res) => {
   res.type('text/xml').send('<Response></Response>');
 });
 
+// Retry queue for failed/no-answer calls
+const retryQueue = [];
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 300000; // 5 minutes
+
+function addToRetryQueue(recordId, reason) {
+  const existing = retryQueue.find(r => r.recordId === recordId);
+  if (existing) {
+    existing.attempts++;
+    if (existing.attempts >= MAX_RETRIES) {
+      console.log(`Max retries reached for ${recordId}`);
+      return;
+    }
+  } else {
+    retryQueue.push({ recordId, reason, attempts: 1, scheduledTime: Date.now() + RETRY_DELAY_MS });
+  }
+  console.log(`Added ${recordId} to retry queue (reason: ${reason})`);
+}
+
 // Helper functions for formatting
 function formatDate(dateStr) {
   if (!dateStr) return '';
@@ -717,7 +769,8 @@ wss.on('connection', async (twilioWs, req) => {
             }
           }
         };
-        console.log('Sending ElevenLabs init with customer:', currentLead?.firstName);
+        console.log('Sending ElevenLabs init with customer:', currentLead?.firstName, currentLead?.lastName);
+        console.log('Dynamic variables:', JSON.stringify(config.conversation_config_override?.agent?.prompt?.dynamic_variables || {}, null, 2));
         ws.send(JSON.stringify(config));
       });
 
