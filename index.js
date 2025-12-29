@@ -113,7 +113,7 @@ app.get('/api/leads', async (req, res) => {
 
     const data = await qbRequest('records/query', 'POST', {
       from: QB_LEADS_TABLE,
-      select: [3, 6, 7, 8, 9, 11, 15, 94, 95, 97, 98, 99, 110, 126],
+      select: [3, 6, 7, 9, 11, 15, 94, 95, 97, 98, 99, 108, 109, 126],
       where: whereClause,
       sortBy: [{ fieldId: 126, order: 'ASC' }]
     });
@@ -122,8 +122,8 @@ app.get('/api/leads', async (req, res) => {
       recordId: row['3']?.value,
       firstName: row['6']?.value || '',
       lastName: row['7']?.value || '',
-      phone: row['8']?.value || '',
-      altPhone: row['110']?.value || '',
+      phone: row['109']?.value || '',
+      altPhone: row['108']?.value || '',
       status: row['9']?.value || '',
       appointmentDate: row['11']?.value,
       appointmentTime: row['126']?.value,
@@ -165,7 +165,7 @@ app.post('/api/campaign/start', async (req, res) => {
 
     const data = await qbRequest('records/query', 'POST', {
       from: QB_LEADS_TABLE,
-      select: [3, 6, 7, 8, 9, 11, 15, 94, 95, 97, 98, 99, 110, 126],
+      select: [3, 6, 7, 9, 11, 15, 94, 95, 97, 98, 99, 108, 109, 126],
       where: whereClause,
       sortBy: [{ fieldId: 126, order: 'ASC' }]
     });
@@ -174,8 +174,8 @@ app.post('/api/campaign/start', async (req, res) => {
       recordId: row['3']?.value,
       firstName: row['6']?.value || '',
       lastName: row['7']?.value || '',
-      phone: row['8']?.value || '',
-      altPhone: row['110']?.value || '',
+      phone: row['109']?.value || '',
+      altPhone: row['108']?.value || '',
       status: row['9']?.value || '',
       appointmentDate: row['11']?.value,
       appointmentTime: row['126']?.value,
