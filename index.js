@@ -447,6 +447,7 @@ wss.on('connection', async (twilioWs, req) => {
   let callSid = null;
   let elevenLabsWs = null;
   let leadId = null;
+  let elevenLabsReady = false;
 
   // Get signed URL from ElevenLabs
   async function connectToElevenLabs() {
@@ -509,6 +510,7 @@ wss.on('connection', async (twilioWs, req) => {
             console.log('User said:', message.user_transcription_event?.user_transcript);
           } else if (message.type === 'conversation_initiation_metadata') {
             console.log('Conversation initiated:', message.conversation_initiation_metadata_event?.conversation_id);
+            elevenLabsReady = true;
           } else if (message.type === 'ping') {
             // Respond to ping with pong
             ws.send(JSON.stringify({ type: 'pong' }));
@@ -549,9 +551,9 @@ wss.on('connection', async (twilioWs, req) => {
           break;
 
         case 'media':
-          // Forward audio to ElevenLabs
-          if (elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
-            // Send audio chunk to ElevenLabs
+          // Forward audio to ElevenLabs only when ready
+          if (elevenLabsReady && elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
+            // Send audio chunk to ElevenLabs as base64
             const audioMessage = {
               user_audio_chunk: msg.media.payload
             };
