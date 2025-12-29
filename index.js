@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
+import { mulawToPcm16k, pcm16kToMulaw } from './audio.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -498,7 +499,7 @@ wss.on('connection', async (twilioWs, req) => {
                 event: 'media',
                 streamSid: streamSid,
                 media: {
-                  payload: audioBase64
+                  payload: pcm16kToMulaw(audioBase64) || audioBase64
                 }
               };
               twilioWs.send(JSON.stringify(audioData));
@@ -555,7 +556,7 @@ wss.on('connection', async (twilioWs, req) => {
           if (elevenLabsReady && elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
             // Send audio chunk to ElevenLabs as base64
             const audioMessage = {
-              user_audio_chunk: msg.media.payload
+              user_audio_chunk: mulawToPcm16k(msg.media.payload)
             };
             elevenLabsWs.send(JSON.stringify(audioMessage));
           }
