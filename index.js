@@ -556,7 +556,7 @@ wss.on('connection', async (twilioWs, req) => {
           if (elevenLabsReady && elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
             // Send audio chunk to ElevenLabs as base64
             const audioMessage = {
-              user_audio_chunk: mulawToPcm16k(msg.media.payload)
+              user_audio_chunk: (() => { const c = mulawToPcm16k(msg.media.payload); return c ? c : msg.media.payload; })()
             };
             elevenLabsWs.send(JSON.stringify(audioMessage));
           }
