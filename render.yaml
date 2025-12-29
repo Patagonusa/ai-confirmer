@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: ai-confirmer
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ELEVENLABS_AGENT_ID
+        value: agent_5401k6yee2wefr083etjk53nxazt
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: QB_REALM
+        value: experthomebuildersproduction.quickbase.com
+      - key: QB_APP_ID
+        value: bqn46epjm
+      - key: QB_USER_TOKEN
+        sync: false
+      - key: TWILIO_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE
+        value: +18886093009

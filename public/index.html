@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Confirmer - Voice Agent Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #e4e4e7;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        header {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 15px 0;
+            margin-bottom: 30px;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 45px;
+            height: 45px;
+            background: linear-gradient(135deg, #00d4ff, #0099cc);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .logo h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #00d4ff, #fff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ef4444;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.running {
+            background: #22c55e;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Main Grid */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 25px;
+        }
+
+        /* Cards */
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 24px;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        /* Control Panel */
+        .control-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-group label {
+            font-size: 0.85rem;
+            color: #a1a1aa;
+            font-weight: 500;
+        }
+
+        input[type="date"],
+        textarea,
+        select {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 12px 15px;
+            color: #fff;
+            font-size: 0.95rem;
+            transition: all 0.3s;
+        }
+
+        input[type="date"]:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #00d4ff;
+            box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        /* Disposition Checkboxes */
+        .disposition-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+
+        .disposition-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.8rem;
+        }
+
+        .disposition-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .disposition-item input {
+            accent-color: #00d4ff;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 14px 28px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #00d4ff, #0099cc);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: #fff;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-group .btn {
+            flex: 1;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: #a1a1aa;
+        }
+
+        .stat-card.total .stat-value { color: #00d4ff; }
+        .stat-card.confirmed .stat-value { color: #22c55e; }
+        .stat-card.pending .stat-value { color: #f59e0b; }
+        .stat-card.no-answer .stat-value { color: #ef4444; }
+
+        /* Current Call */
+        .current-call {
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(0, 153, 204, 0.1));
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .current-call.active {
+            display: block;
+        }
+
+        .current-call-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .current-call-title {
+            font-size: 0.9rem;
+            color: #00d4ff;
+            font-weight: 600;
+        }
+
+        .call-timer {
+            font-family: 'Courier New', monospace;
+            font-size: 1.2rem;
+            color: #00d4ff;
+        }
+
+        .current-call-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .call-info-item {
+            font-size: 0.9rem;
+        }
+
+        .call-info-item span {
+            color: #a1a1aa;
+        }
+
+        /* Call History Table */
+        .table-container {
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        th {
+            background: rgba(0, 0, 0, 0.3);
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #a1a1aa;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            position: sticky;
+            top: 0;
+        }
+
+        tr:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .status-badge.initiated { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+        .status-badge.ringing { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+        .status-badge.in-progress { background: rgba(139, 92, 246, 0.2); color: #a78bfa; }
+        .status-badge.completed { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
+        .status-badge.no-answer { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+        .status-badge.busy { background: rgba(249, 115, 22, 0.2); color: #fb923c; }
+        .status-badge.failed { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+        .status-badge.skipped { background: rgba(107, 114, 128, 0.2); color: #9ca3af; }
+        .status-badge.error { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+
+        /* Preview Section */
+        .preview-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .preview-count {
+            font-size: 0.9rem;
+            color: #00d4ff;
+        }
+
+        .lead-preview {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .lead-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 0.85rem;
+        }
+
+        .lead-name {
+            font-weight: 500;
+        }
+
+        .lead-time {
+            color: #a1a1aa;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            margin-bottom: 20px;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.85rem;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00d4ff, #22c55e);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 600px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .disposition-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">
+                <div class="logo-icon">📞</div>
+                <h1>AI Confirmer</h1>
+            </div>
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Stopped</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="main-grid">
+            <!-- Control Panel -->
+            <div class="control-panel">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Campaign Settings</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Appointment Date</label>
+                        <input type="date" id="appointmentDate">
+                    </div>
+
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label>Dispositions to Call</label>
+                        <div class="disposition-grid" id="dispositionGrid">
+                            <!-- Dispositions will be loaded here -->
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label>Agent Instructions</label>
+                        <textarea id="instructions" placeholder="Enter specific instructions for the AI agent...&#10;&#10;Example:&#10;- Be friendly and professional&#10;- Confirm appointment time&#10;- Offer to reschedule if needed"></textarea>
+                    </div>
+
+                    <div class="preview-section" id="previewSection" style="display: none;">
+                        <div class="preview-header">
+                            <span class="card-title">Leads Preview</span>
+                            <span class="preview-count" id="previewCount">0 leads</span>
+                        </div>
+                        <div class="lead-preview" id="leadPreview">
+                            <!-- Leads will be shown here -->
+                        </div>
+                    </div>
+
+                    <div class="btn-group" style="margin-top: 20px;">
+                        <button class="btn btn-primary" id="startBtn" onclick="startCampaign()">
+                            <span>Start Campaign</span>
+                        </button>
+                        <button class="btn btn-danger" id="stopBtn" onclick="stopCampaign()" disabled>
+                            <span>Stop</span>
+                        </button>
+                    </div>
+
+                    <button class="btn" style="margin-top: 10px; background: rgba(255,255,255,0.1); width: 100%;" onclick="previewLeads()">
+                        Preview Leads
+                    </button>
+                </div>
+            </div>
+
+            <!-- Dashboard -->
+            <div class="dashboard">
+                <!-- Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card total">
+                        <div class="stat-value" id="statTotal">0</div>
+                        <div class="stat-label">Total Leads</div>
+                    </div>
+                    <div class="stat-card confirmed">
+                        <div class="stat-value" id="statConfirmed">0</div>
+                        <div class="stat-label">Confirmed</div>
+                    </div>
+                    <div class="stat-card pending">
+                        <div class="stat-value" id="statCalls">0</div>
+                        <div class="stat-label">Calls Made</div>
+                    </div>
+                    <div class="stat-card no-answer">
+                        <div class="stat-value" id="statNoAnswer">0</div>
+                        <div class="stat-label">No Answer</div>
+                    </div>
+                </div>
+
+                <!-- Progress -->
+                <div class="card" style="margin-bottom: 20px;">
+                    <div class="progress-container">
+                        <div class="progress-header">
+                            <span>Campaign Progress</span>
+                            <span id="progressPercent">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #a1a1aa;">
+                        <span>Remaining: <strong id="statRemaining">0</strong></span>
+                        <span>Elapsed: <strong id="elapsedTime">0 min</strong></span>
+                    </div>
+                </div>
+
+                <!-- Current Call -->
+                <div class="current-call" id="currentCall">
+                    <div class="current-call-header">
+                        <span class="current-call-title">CURRENTLY CALLING</span>
+                        <span class="call-timer" id="callTimer">00:00</span>
+                    </div>
+                    <div class="current-call-info">
+                        <div class="call-info-item">
+                            <span>Name:</span> <strong id="currentName">-</strong>
+                        </div>
+                        <div class="call-info-item">
+                            <span>Phone:</span> <strong id="currentPhone">-</strong>
+                        </div>
+                        <div class="call-info-item">
+                            <span>Time:</span> <strong id="currentTime">-</strong>
+                        </div>
+                        <div class="call-info-item">
+                            <span>Product:</span> <strong id="currentProduct">-</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Call History -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Call History</span>
+                        <span style="font-size: 0.85rem; color: #a1a1aa;" id="historyCount">0 calls</span>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Name</th>
+                                    <th>Phone</th>
+                                    <th>Status</th>
+                                    <th>Duration</th>
+                                </tr>
+                            </thead>
+                            <tbody id="callHistory">
+                                <tr>
+                                    <td colspan="5" style="text-align: center; color: #a1a1aa; padding: 40px;">
+                                        No calls yet. Start a campaign to begin calling.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+        let statusInterval = null;
+        let callTimerInterval = null;
+        let callStartTime = null;
+
+        // Set default date to today
+        document.getElementById('appointmentDate').valueAsDate = new Date();
+
+        // Load dispositions on page load
+        async function loadDispositions() {
+            try {
+                const response = await fetch(`${API_BASE}/api/statuses`);
+                const statuses = await response.json();
+
+                const grid = document.getElementById('dispositionGrid');
+                grid.innerHTML = '';
+
+                // Common dispositions to pre-select
+                const preSelected = ['Pre Confirmed', 'No Confirmation - Set', 'LL/MO', 'Call Back to Reschedule'];
+
+                statuses.forEach(status => {
+                    const isChecked = preSelected.includes(status.name);
+                    const item = document.createElement('label');
+                    item.className = 'disposition-item';
+                    item.innerHTML = `
+                        <input type="checkbox" value="${status.name}" ${isChecked ? 'checked' : ''}>
+                        <span>${status.name}</span>
+                    `;
+                    grid.appendChild(item);
+                });
+            } catch (error) {
+                console.error('Error loading dispositions:', error);
+            }
+        }
+
+        // Preview leads for selected date and dispositions
+        async function previewLeads() {
+            const date = document.getElementById('appointmentDate').value;
+            if (!date) {
+                alert('Please select a date');
+                return;
+            }
+
+            const checkboxes = document.querySelectorAll('#dispositionGrid input:checked');
+            const dispositions = Array.from(checkboxes).map(cb => cb.value);
+
+            try {
+                const params = new URLSearchParams({ date });
+                if (dispositions.length > 0) {
+                    params.append('dispositions', dispositions.join(','));
+                }
+
+                const response = await fetch(`${API_BASE}/api/leads?${params}`);
+                const data = await response.json();
+
+                const previewSection = document.getElementById('previewSection');
+                const previewCount = document.getElementById('previewCount');
+                const leadPreview = document.getElementById('leadPreview');
+
+                previewCount.textContent = `${data.total} leads`;
+                previewSection.style.display = 'block';
+
+                if (data.leads.length === 0) {
+                    leadPreview.innerHTML = '<div style="text-align: center; color: #a1a1aa; padding: 20px;">No leads found for selected criteria</div>';
+                } else {
+                    leadPreview.innerHTML = data.leads.slice(0, 10).map(lead => `
+                        <div class="lead-item">
+                            <span class="lead-name">${lead.firstName} ${lead.lastName}</span>
+                            <span class="lead-time">${lead.appointmentTime || 'No time'}</span>
+                        </div>
+                    `).join('');
+
+                    if (data.leads.length > 10) {
+                        leadPreview.innerHTML += `<div style="text-align: center; color: #a1a1aa; padding: 10px;">... and ${data.leads.length - 10} more</div>`;
+                    }
+                }
+            } catch (error) {
+                console.error('Error previewing leads:', error);
+                alert('Error loading leads preview');
+            }
+        }
+
+        // Start campaign
+        async function startCampaign() {
+            const date = document.getElementById('appointmentDate').value;
+            const instructions = document.getElementById('instructions').value;
+
+            if (!date) {
+                alert('Please select a date');
+                return;
+            }
+
+            const checkboxes = document.querySelectorAll('#dispositionGrid input:checked');
+            const dispositions = Array.from(checkboxes).map(cb => cb.value);
+
+            if (dispositions.length === 0) {
+                alert('Please select at least one disposition');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/campaign/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date, dispositions, instructions })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('stopBtn').disabled = false;
+                    document.getElementById('statusDot').classList.add('running');
+                    document.getElementById('statusText').textContent = 'Running';
+
+                    // Start status polling
+                    startStatusPolling();
+                } else {
+                    alert(data.error || 'Failed to start campaign');
+                }
+            } catch (error) {
+                console.error('Error starting campaign:', error);
+                alert('Error starting campaign');
+            }
+        }
+
+        // Stop campaign
+        async function stopCampaign() {
+            try {
+                const response = await fetch(`${API_BASE}/api/campaign/stop`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+                document.getElementById('statusDot').classList.remove('running');
+                document.getElementById('statusText').textContent = 'Stopped';
+                document.getElementById('currentCall').classList.remove('active');
+
+                stopStatusPolling();
+            } catch (error) {
+                console.error('Error stopping campaign:', error);
+            }
+        }
+
+        // Start polling for status updates
+        function startStatusPolling() {
+            updateStatus();
+            statusInterval = setInterval(updateStatus, 2000);
+        }
+
+        function stopStatusPolling() {
+            if (statusInterval) {
+                clearInterval(statusInterval);
+                statusInterval = null;
+            }
+            if (callTimerInterval) {
+                clearInterval(callTimerInterval);
+                callTimerInterval = null;
+            }
+        }
+
+        // Update campaign status
+        async function updateStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/api/campaign/status`);
+                const data = await response.json();
+
+                // Update stats
+                document.getElementById('statTotal').textContent = data.stats.totalLeads;
+                document.getElementById('statConfirmed').textContent = data.stats.confirmed;
+                document.getElementById('statCalls').textContent = data.stats.callsMade;
+                document.getElementById('statNoAnswer').textContent = data.stats.noAnswer;
+                document.getElementById('statRemaining').textContent = data.stats.remaining;
+                document.getElementById('elapsedTime').textContent = `${data.stats.elapsedMinutes} min`;
+
+                // Update progress
+                const progress = data.stats.totalLeads > 0
+                    ? Math.round((data.stats.callsMade / data.stats.totalLeads) * 100)
+                    : 0;
+                document.getElementById('progressPercent').textContent = `${progress}%`;
+                document.getElementById('progressFill').style.width = `${progress}%`;
+
+                // Update current call
+                if (data.currentLead && data.running) {
+                    const currentCall = document.getElementById('currentCall');
+                    currentCall.classList.add('active');
+                    document.getElementById('currentName').textContent = `${data.currentLead.firstName} ${data.currentLead.lastName}`;
+                    document.getElementById('currentPhone').textContent = data.currentLead.phone || data.currentLead.altPhone || '-';
+                    document.getElementById('currentTime').textContent = data.currentLead.appointmentTime || '-';
+                    document.getElementById('currentProduct').textContent = data.currentLead.product || '-';
+
+                    // Start call timer
+                    if (!callTimerInterval) {
+                        callStartTime = Date.now();
+                        callTimerInterval = setInterval(updateCallTimer, 1000);
+                    }
+                } else {
+                    document.getElementById('currentCall').classList.remove('active');
+                    if (callTimerInterval) {
+                        clearInterval(callTimerInterval);
+                        callTimerInterval = null;
+                    }
+                }
+
+                // Update call history
+                updateCallHistory(data.recentCalls);
+
+                // Check if campaign finished
+                if (!data.running && statusInterval) {
+                    document.getElementById('startBtn').disabled = false;
+                    document.getElementById('stopBtn').disabled = true;
+                    document.getElementById('statusDot').classList.remove('running');
+                    document.getElementById('statusText').textContent = 'Completed';
+                    stopStatusPolling();
+                }
+            } catch (error) {
+                console.error('Error updating status:', error);
+            }
+        }
+
+        // Update call timer display
+        function updateCallTimer() {
+            if (callStartTime) {
+                const elapsed = Math.floor((Date.now() - callStartTime) / 1000);
+                const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+                const seconds = (elapsed % 60).toString().padStart(2, '0');
+                document.getElementById('callTimer').textContent = `${minutes}:${seconds}`;
+            }
+        }
+
+        // Update call history table
+        function updateCallHistory(calls) {
+            const tbody = document.getElementById('callHistory');
+            document.getElementById('historyCount').textContent = `${calls.length} calls`;
+
+            if (!calls || calls.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; color: #a1a1aa; padding: 40px;">
+                            No calls yet. Start a campaign to begin calling.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = calls.map(call => {
+                const time = new Date(call.timestamp).toLocaleTimeString();
+                return `
+                    <tr>
+                        <td>${time}</td>
+                        <td>${call.name}</td>
+                        <td>${call.phone}</td>
+                        <td><span class="status-badge ${call.status}">${call.status}</span></td>
+                        <td>${call.duration ? `${call.duration}s` : '-'}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Initial load
+        loadDispositions();
+        updateStatus();
+    </script>
+</body>
+</html>
