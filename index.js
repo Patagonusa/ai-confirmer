@@ -55,6 +55,7 @@ const activeCampaign = {
 };
 
 const callHistory = [];
+const callTranscripts = new Map(); // Map callSid -> transcript array
 const activeConnections = new Map(); // Track active WebSocket connections
 
 // Quickbase API helper
@@ -317,7 +318,10 @@ async function initiateAICall(lead, phone) {
     from: TWILIO_PHONE,
     url: `${publicUrl}/api/voice/connect?leadId=${lead.recordId}`,
     statusCallback: `${publicUrl}/api/voice/status`,
-    statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed']
+    statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+    record: true,
+    recordingStatusCallback: `${publicUrl}/api/voice/recording`,
+    recordingStatusCallbackEvent: ['completed']
   });
 
   return {
@@ -366,6 +370,23 @@ app.post('/api/voice/status', (req, res) => {
     } else if (CallStatus === 'no-answer' || CallStatus === 'busy') {
       activeCampaign.noAnswer++;
     }
+  }
+
+  res.sendStatus(200);
+});
+
+
+// Recording callback
+app.post('/api/voice/recording', async (req, res) => {
+  const { CallSid, RecordingUrl, RecordingSid, RecordingDuration } = req.body;
+  console.log('Recording received for call:', CallSid, RecordingUrl);
+
+  const call = callHistory.find(c => c.callSid === CallSid);
+  if (call) {
+    call.recordingUrl = RecordingUrl + '.mp3';
+    call.recordingSid = RecordingSid;
+    call.recordingDuration = RecordingDuration;
+    console.log('Recording URL saved:', call.recordingUrl);
   }
 
   res.sendStatus(200);
@@ -433,6 +454,87 @@ app.post('/api/lead/:recordId/status', async (req, res) => {
 // Get call history
 app.get('/api/calls/history', (req, res) => {
   res.json(callHistory.slice(-100).reverse());
+});
+
+
+// SMS/Texting endpoints
+const smsHistory = []; // In-memory SMS storage
+
+// Send SMS
+app.post('/api/sms/send', async (req, res) => {
+  try {
+    const { to, message } = req.body;
+    if (!to || !message) {
+      return res.status(400).json({ error: 'Phone and message required' });
+    }
+
+    let phoneNumber = to.replace(/D/g, '');
+    if (phoneNumber.length === 10) phoneNumber = '1' + phoneNumber;
+    if (!phoneNumber.startsWith('+')) phoneNumber = '+' + phoneNumber;
+
+    const sms = await twilioClient.messages.create({
+      body: message,
+      from: TWILIO_PHONE,
+      to: phoneNumber
+    });
+
+    smsHistory.push({
+      sid: sms.sid,
+      phone: phoneNumber,
+      text: message,
+      direction: 'outgoing',
+      timestamp: new Date()
+    });
+
+    res.json({ success: true, sid: sms.sid });
+  } catch (error) {
+    console.error('Error sending SMS:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get SMS threads
+app.get('/api/sms/threads', (req, res) => {
+  const threads = {};
+  smsHistory.forEach(msg => {
+    if (!threads[msg.phone]) {
+      threads[msg.phone] = {
+        phone: msg.phone,
+        name: msg.name || msg.phone,
+        lastMessage: msg.text,
+        lastTime: msg.timestamp
+      };
+    } else if (new Date(msg.timestamp) > new Date(threads[msg.phone].lastTime)) {
+      threads[msg.phone].lastMessage = msg.text;
+      threads[msg.phone].lastTime = msg.timestamp;
+    }
+  });
+  res.json(Object.values(threads));
+});
+
+// Get messages for a phone
+app.get('/api/sms/messages', (req, res) => {
+  const { phone } = req.query;
+  if (!phone) return res.json([]);
+
+  let cleanPhone = phone.replace(/D/g, '');
+  if (cleanPhone.length === 10) cleanPhone = '1' + cleanPhone;
+  if (!cleanPhone.startsWith('+')) cleanPhone = '+' + cleanPhone;
+
+  const messages = smsHistory.filter(m => m.phone === cleanPhone);
+  res.json(messages);
+});
+
+// Twilio SMS webhook for incoming messages
+app.post('/api/sms/incoming', (req, res) => {
+  const { From, Body } = req.body;
+  smsHistory.push({
+    phone: From,
+    text: Body,
+    direction: 'incoming',
+    timestamp: new Date()
+  });
+  res.type('text/xml').send('<Response></Response>');
 });
 
 // Health check
@@ -554,8 +656,18 @@ wss.on('connection', async (twilioWs, req) => {
             }
           } else if (message.type === 'agent_response') {
             console.log('Agent says:', message.agent_response_event?.agent_response);
+            // Store agent transcript
+            if (callSid && message.agent_response_event?.agent_response) {
+              if (!callTranscripts.has(callSid)) callTranscripts.set(callSid, []);
+              callTranscripts.get(callSid).push({ speaker: 'Agent', text: message.agent_response_event.agent_response, timestamp: new Date() });
+            }
           } else if (message.type === 'user_transcript') {
             console.log('User said:', message.user_transcription_event?.user_transcript);
+            // Store user transcript
+            if (callSid && message.user_transcription_event?.user_transcript) {
+              if (!callTranscripts.has(callSid)) callTranscripts.set(callSid, []);
+              callTranscripts.get(callSid).push({ speaker: 'Customer', text: message.user_transcription_event.user_transcript, timestamp: new Date() });
+            }
           } else if (message.type === 'conversation_initiation_metadata') {
             console.log('Conversation initiated:', message.conversation_initiation_metadata_event?.conversation_id);
             elevenLabsReady = true;
@@ -630,6 +742,15 @@ wss.on('connection', async (twilioWs, req) => {
 
   twilioWs.on('close', () => {
     console.log('Twilio WebSocket closed');
+    // Save transcript to call history
+    if (callSid && callTranscripts.has(callSid)) {
+      const call = callHistory.find(c => c.callSid === callSid);
+      if (call) {
+        call.transcript = callTranscripts.get(callSid);
+        console.log('Transcript saved for call:', callSid, call.transcript.length, 'lines');
+      }
+      callTranscripts.delete(callSid);
+    }
     if (elevenLabsWs) {
       elevenLabsWs.close();
     }
