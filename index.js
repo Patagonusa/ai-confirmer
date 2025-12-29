@@ -4,6 +4,8 @@ import fetch from 'node-fetch';
 import twilio from 'twilio';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createServer } from 'http';
+import { WebSocketServer, WebSocket } from 'ws';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,6 +13,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Configuration
@@ -51,6 +54,7 @@ const activeCampaign = {
 };
 
 const callHistory = [];
+const activeConnections = new Map(); // Track active WebSocket connections
 
 // Quickbase API helper
 async function qbRequest(endpoint, method = 'GET', body = null) {
@@ -281,24 +285,23 @@ async function processNextCall() {
   }
 }
 
+// Get the public URL for webhooks
+function getPublicUrl() {
+  return process.env.RENDER_EXTERNAL_HOSTNAME
+    ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}`
+    : `https://ai-confirmer.onrender.com`;
+}
+
 // Initiate AI call using ElevenLabs + Twilio
 async function initiateAICall(lead, phone) {
-  // Build context for the AI agent
-  const context = {
-    customerName: `${lead.firstName} ${lead.lastName}`,
-    appointmentDate: lead.appointmentDate,
-    appointmentTime: lead.appointmentTime,
-    product: lead.product,
-    address: `${lead.street}, ${lead.city}, ${lead.state} ${lead.zip}`,
-    instructions: activeCampaign.instructions
-  };
+  const publicUrl = getPublicUrl();
 
-  // Create outbound call with Twilio that connects to ElevenLabs
+  // Create outbound call with Twilio that connects to our WebSocket bridge
   const call = await twilioClient.calls.create({
     to: phone,
     from: TWILIO_PHONE,
-    url: `https://${process.env.RENDER_EXTERNAL_HOSTNAME || 'localhost:3000'}/api/voice/connect?leadId=${lead.recordId}`,
-    statusCallback: `https://${process.env.RENDER_EXTERNAL_HOSTNAME || 'localhost:3000'}/api/voice/status`,
+    url: `${publicUrl}/api/voice/connect?leadId=${lead.recordId}`,
+    statusCallback: `${publicUrl}/api/voice/status`,
     statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed']
   });
 
@@ -308,53 +311,26 @@ async function initiateAICall(lead, phone) {
   };
 }
 
-// Twilio voice webhook - connects to ElevenLabs
+// Twilio voice webhook - connects to our WebSocket bridge
 app.post('/api/voice/connect', async (req, res) => {
   const leadId = req.query.leadId;
-  const lead = callHistory.find(c => c.recordId == leadId) || activeCampaign.currentLead;
+  const publicUrl = getPublicUrl();
+  const wsUrl = publicUrl.replace('https://', 'wss://');
 
-  try {
-    // Get signed URL from ElevenLabs for Twilio integration
-    const signedUrlResponse = await fetch(
-      `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${ELEVENLABS_AGENT_ID}`,
-      {
-        method: 'GET',
-        headers: {
-          'xi-api-key': ELEVENLABS_API_KEY
-        }
-      }
-    );
+  console.log(`Voice connect for lead ${leadId}, WebSocket URL: ${wsUrl}`);
 
-    const signedUrlData = await signedUrlResponse.json();
-    const signedUrl = signedUrlData.signed_url;
-
-    console.log('Got signed URL from ElevenLabs:', signedUrl ? 'success' : 'failed');
-
-    // TwiML to connect call to ElevenLabs websocket with signed URL
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+  // TwiML to connect call to our WebSocket bridge
+  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <Stream url="${signedUrl}">
-      <Parameter name="customer_name" value="${lead?.firstName || 'Customer'}" />
-      <Parameter name="appointment_date" value="${lead?.appointmentDate || ''}" />
-      <Parameter name="appointment_time" value="${lead?.appointmentTime || ''}" />
-      <Parameter name="product" value="${lead?.product || ''}" />
-      <Parameter name="instructions" value="${activeCampaign.instructions || ''}" />
+    <Stream url="${wsUrl}/media-stream">
+      <Parameter name="leadId" value="${leadId}" />
     </Stream>
   </Connect>
 </Response>`;
 
-    res.type('text/xml');
-    res.send(twiml);
-  } catch (error) {
-    console.error('Error getting signed URL:', error);
-    // Fallback to simple message
-    res.type('text/xml');
-    res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say>Sorry, there was an error connecting to the AI agent. Please try again later.</Say>
-</Response>`);
-  }
+  res.type('text/xml');
+  res.send(twiml);
 });
 
 // Twilio status callback
@@ -458,15 +434,162 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, () => {
+// Create HTTP server
+const server = createServer(app);
+
+// Create WebSocket server for Twilio media streams
+const wss = new WebSocketServer({ server, path: '/media-stream' });
+
+wss.on('connection', async (twilioWs, req) => {
+  console.log('Twilio WebSocket connected');
+
+  let streamSid = null;
+  let callSid = null;
+  let elevenLabsWs = null;
+  let leadId = null;
+
+  // Get signed URL from ElevenLabs
+  async function connectToElevenLabs() {
+    try {
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${ELEVENLABS_AGENT_ID}`,
+        {
+          method: 'GET',
+          headers: { 'xi-api-key': ELEVENLABS_API_KEY }
+        }
+      );
+      const data = await response.json();
+
+      if (!data.signed_url) {
+        console.error('Failed to get signed URL from ElevenLabs');
+        return null;
+      }
+
+      console.log('Got ElevenLabs signed URL, connecting...');
+
+      const ws = new WebSocket(data.signed_url);
+
+      ws.on('open', () => {
+        console.log('Connected to ElevenLabs');
+
+        // Send initial configuration for Twilio audio format
+        const config = {
+          type: 'conversation_initiation_client_data',
+          conversation_config_override: {
+            agent: {
+              first_message: "Hi there! This is an AI calling to confirm your upcoming home improvement appointment. Am I speaking with the homeowner?"
+            },
+            tts: {
+              agent_output_audio_format: "ulaw_8000"
+            }
+          },
+          custom_llm_extra_body: {
+            leadId: leadId
+          }
+        };
+        ws.send(JSON.stringify(config));
+      });
+
+      ws.on('message', (data) => {
+        try {
+          const message = JSON.parse(data.toString());
+
+          if (message.type === 'audio') {
+            // Send audio to Twilio
+            if (twilioWs.readyState === WebSocket.OPEN && streamSid) {
+              const audioData = {
+                event: 'media',
+                streamSid: streamSid,
+                media: {
+                  payload: message.audio_event?.audio_base_64 || message.audio?.chunk
+                }
+              };
+              twilioWs.send(JSON.stringify(audioData));
+            }
+          } else if (message.type === 'agent_response') {
+            console.log('Agent:', message.agent_response_event?.agent_response);
+          } else if (message.type === 'user_transcript') {
+            console.log('User:', message.user_transcription_event?.user_transcript);
+          }
+        } catch (err) {
+          console.error('Error processing ElevenLabs message:', err);
+        }
+      });
+
+      ws.on('error', (error) => {
+        console.error('ElevenLabs WebSocket error:', error);
+      });
+
+      ws.on('close', () => {
+        console.log('ElevenLabs WebSocket closed');
+      });
+
+      return ws;
+    } catch (error) {
+      console.error('Error connecting to ElevenLabs:', error);
+      return null;
+    }
+  }
+
+  twilioWs.on('message', async (message) => {
+    try {
+      const msg = JSON.parse(message.toString());
+
+      switch (msg.event) {
+        case 'start':
+          streamSid = msg.start.streamSid;
+          callSid = msg.start.callSid;
+          leadId = msg.start.customParameters?.leadId;
+          console.log(`Stream started: ${streamSid}, Call: ${callSid}, Lead: ${leadId}`);
+
+          // Connect to ElevenLabs
+          elevenLabsWs = await connectToElevenLabs();
+          break;
+
+        case 'media':
+          // Forward audio to ElevenLabs
+          if (elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
+            const audioMessage = {
+              user_audio_chunk: msg.media.payload
+            };
+            elevenLabsWs.send(JSON.stringify(audioMessage));
+          }
+          break;
+
+        case 'stop':
+          console.log('Stream stopped');
+          if (elevenLabsWs) {
+            elevenLabsWs.close();
+          }
+          break;
+      }
+    } catch (error) {
+      console.error('Error processing Twilio message:', error);
+    }
+  });
+
+  twilioWs.on('close', () => {
+    console.log('Twilio WebSocket closed');
+    if (elevenLabsWs) {
+      elevenLabsWs.close();
+    }
+  });
+
+  twilioWs.on('error', (error) => {
+    console.error('Twilio WebSocket error:', error);
+  });
+});
+
+server.listen(PORT, () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║           AI CONFIRMER - Voice Agent System               ║
 ╠═══════════════════════════════════════════════════════════╣
 ║   Server running on port ${PORT}                            ║
-║   ElevenLabs Agent: ${ELEVENLABS_AGENT_ID.substring(0, 20)}...         ║
-║   Quickbase Realm: ${QB_REALM.substring(0, 30)}...    ║
-║   Twilio Phone: ${TWILIO_PHONE}                        ║
+║   ElevenLabs Agent: ${ELEVENLABS_AGENT_ID?.substring(0, 20) || 'not set'}...         ║
+║   Quickbase Realm: ${QB_REALM?.substring(0, 30) || 'not set'}...    ║
+║   Twilio Phone: ${TWILIO_PHONE || 'not set'}                        ║
+║   WebSocket bridge: enabled                               ║
 ╚═══════════════════════════════════════════════════════════╝
   `);
 });
