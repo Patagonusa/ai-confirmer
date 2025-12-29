@@ -57,6 +57,7 @@ const activeCampaign = {
 const callHistory = [];
 const callTranscripts = new Map(); // Map callSid -> transcript array
 const activeConnections = new Map(); // Track active WebSocket connections
+const pendingCallLeads = new Map(); // Store lead data for pending calls
 
 // Quickbase API helper
 async function qbRequest(endpoint, method = 'GET', body = null) {
@@ -146,11 +147,21 @@ app.get('/api/leads', async (req, res) => {
     const { timeFrom, timeTo } = req.query;
     let filteredLeads = leads;
     if (timeFrom || timeTo) {
+      // Normalize time format for comparison (HH:MM -> HH:MM:SS)
+      const normalizeTime = (t) => {
+        if (!t) return null;
+        // Remove seconds if present, then add :00
+        const parts = t.split(':');
+        return parts[0].padStart(2, '0') + ':' + (parts[1] || '00').padStart(2, '0') + ':00';
+      };
+      const fromNorm = normalizeTime(timeFrom);
+      const toNorm = normalizeTime(timeTo);
+
       filteredLeads = leads.filter(l => {
         if (!l.appointmentTime) return false;
-        const time = l.appointmentTime;
-        if (timeFrom && time < timeFrom) return false;
-        if (timeTo && time > timeTo) return false;
+        const time = normalizeTime(l.appointmentTime);
+        if (fromNorm && time < fromNorm) return false;
+        if (toNorm && time > toNorm) return false;
         return true;
       });
     }
@@ -312,11 +323,15 @@ function getPublicUrl() {
 async function initiateAICall(lead, phone) {
   const publicUrl = getPublicUrl();
 
+  // Store lead data for WebSocket to access later
+  const tempCallId = Date.now().toString();
+  pendingCallLeads.set(tempCallId, lead);
+
   // Create outbound call with Twilio that connects to our WebSocket bridge
   const call = await twilioClient.calls.create({
     to: phone,
     from: TWILIO_PHONE,
-    url: `${publicUrl}/api/voice/connect?leadId=${lead.recordId}`,
+    url: `${publicUrl}/api/voice/connect?leadId=${lead.recordId}&tempId=${tempCallId}`,
     statusCallback: `${publicUrl}/api/voice/status`,
     statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
     record: true,
@@ -342,7 +357,7 @@ app.post('/api/voice/connect', async (req, res) => {
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <Stream url="${wsUrl}/media-stream">
+    <Stream url="${wsUrl}/media-stream?tempId=${req.query.tempId}">
       <Parameter name="leadId" value="${leadId}" />
     </Stream>
   </Connect>
@@ -562,6 +577,30 @@ app.post('/api/sms/incoming', (req, res) => {
   res.type('text/xml').send('<Response></Response>');
 });
 
+// Helper functions for formatting
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  try {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  } catch (e) {
+    return dateStr;
+  }
+}
+
+function formatTime(timeStr) {
+  if (!timeStr) return '';
+  try {
+    const [hours, minutes] = timeStr.split(':');
+    const h = parseInt(hours);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${h12}:${minutes} ${ampm}`;
+  } catch (e) {
+    return timeStr;
+  }
+}
+
 // Health check
 // Test call endpoint - call a specific phone number
 app.post('/api/test-call', async (req, res) => {
@@ -618,6 +657,14 @@ const wss = new WebSocketServer({ server, path: '/media-stream' });
 wss.on('connection', async (twilioWs, req) => {
   console.log('Twilio WebSocket connected');
 
+  // Get tempId from URL to retrieve lead data
+  const urlParams = new URLSearchParams(req.url.split('?')[1] || '');
+  const tempId = urlParams.get('tempId');
+  const currentLead = tempId ? pendingCallLeads.get(tempId) : null;
+  if (tempId) pendingCallLeads.delete(tempId); // Clean up
+
+  console.log('Current lead for call:', currentLead?.firstName, currentLead?.lastName);
+
   let streamSid = null;
   let callSid = null;
   let elevenLabsWs = null;
@@ -648,11 +695,29 @@ wss.on('connection', async (twilioWs, req) => {
       ws.on('open', () => {
         console.log('Connected to ElevenLabs WebSocket');
 
-        // Send initial configuration - agent already configured for ulaw_8000
+        // Send initial configuration with customer data
         const config = {
-          type: 'conversation_initiation_client_data'
+          type: 'conversation_initiation_client_data',
+          conversation_config_override: {
+            agent: {
+              prompt: {
+                dynamic_variables: currentLead ? {
+                  first_name: currentLead.firstName || 'Customer',
+                  last_name: currentLead.lastName || '',
+                  phone_number: currentLead.phone || currentLead.altPhone || '',
+                  appointment_date: formatDate(currentLead.appointmentDate) || 'your scheduled date',
+                  appointment_time: formatTime(currentLead.appointmentTime) || 'your scheduled time',
+                  product: currentLead.product || 'home improvement service',
+                  company_name: 'Expert Home Builders',
+                  record_id: String(currentLead.recordId || ''),
+                  new_date: '',
+                  new_time: ''
+                } : {}
+              }
+            }
+          }
         };
-        console.log('Sending ElevenLabs init');
+        console.log('Sending ElevenLabs init with customer:', currentLead?.firstName);
         ws.send(JSON.stringify(config));
       });
 
