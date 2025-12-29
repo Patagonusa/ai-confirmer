@@ -748,29 +748,24 @@ wss.on('connection', async (twilioWs, req) => {
         console.log('Connected to ElevenLabs WebSocket');
 
         // Send initial configuration with customer data
+        // Dynamic variables go at top level, not nested under conversation_config_override
         const config = {
           type: 'conversation_initiation_client_data',
-          conversation_config_override: {
-            agent: {
-              prompt: {
-                dynamic_variables: currentLead ? {
-                  first_name: currentLead.firstName || 'Customer',
-                  last_name: currentLead.lastName || '',
-                  phone_number: currentLead.phone || currentLead.altPhone || '',
-                  appointment_date: formatDate(currentLead.appointmentDate) || 'your scheduled date',
-                  appointment_time: formatTime(currentLead.appointmentTime) || 'your scheduled time',
-                  product: currentLead.product || 'home improvement service',
-                  company_name: 'Expert Home Builders',
-                  record_id: String(currentLead.recordId || ''),
-                  new_date: '',
-                  new_time: ''
-                } : {}
-              }
-            }
-          }
+          dynamic_variables: currentLead ? {
+            first_name: currentLead.firstName || 'Customer',
+            last_name: currentLead.lastName || '',
+            phone_number: currentLead.phone || currentLead.altPhone || '',
+            appointment_date: formatDate(currentLead.appointmentDate) || 'your scheduled date',
+            appointment_time: formatTime(currentLead.appointmentTime) || 'your scheduled time',
+            product: currentLead.product || 'home improvement service',
+            company_name: 'Expert Home Builders',
+            record_id: String(currentLead.recordId || ''),
+            new_date: '',
+            new_time: ''
+          } : {}
         };
         console.log('Sending ElevenLabs init with customer:', currentLead?.firstName, currentLead?.lastName);
-        console.log('Dynamic variables:', JSON.stringify(config.conversation_config_override?.agent?.prompt?.dynamic_variables || {}, null, 2));
+        console.log('Dynamic variables:', JSON.stringify(config.dynamic_variables || {}, null, 2));
         ws.send(JSON.stringify(config));
       });
 
