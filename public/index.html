@@ -13,6 +13,7 @@
 <button class="nav-btn active" onclick="showPage(this,'campaign')">Campaign</button>
 <button class="nav-btn" onclick="showPage(this,'leads')">Leads Preview</button>
 <button class="nav-btn" onclick="showPage(this,'history')">Call History</button>
+<button class="nav-btn" onclick="showPage(this,'texting')">Texting</button>
 </div>
 <div class="status-indicator"><div class="status-dot" id="statusDot"></div><span id="statusText">Stopped</span></div>
 </nav>
@@ -21,7 +22,15 @@
 <div class="campaign-grid"><div><div class="card">
 <div class="card-header"><span class="card-title">Campaign Settings</span></div>
 <div class="form-group"><label>Appointment Date</label><input type="date" id="appointmentDate"></div>
-<div class="form-group"><label>Dispositions to Call</label><div class="disposition-grid" id="dispositionGrid"></div></div>
+<div class="form-group">
+<label>Filter by Time Range (optional)</label>
+<div class="time-filter"><input type="time" id="timeFrom"><span>to</span><input type="time" id="timeTo"></div>
+</div>
+<div class="form-group">
+<label>Dispositions to Call</label>
+<div class="disposition-controls"><button class="btn-small" onclick="selectAllDispositions()">Select All</button><button class="btn-small" onclick="clearAllDispositions()">Clear All</button></div>
+<div class="disposition-grid" id="dispositionGrid"></div>
+</div>
 <div class="btn-group"><button class="btn btn-primary" id="startBtn" onclick="startCampaign()">Start Campaign</button><button class="btn btn-danger" id="stopBtn" onclick="stopCampaign()" disabled>Stop</button></div>
 <button class="btn btn-secondary" style="width:100%; margin-top:10px;" onclick="previewLeads()">Preview Leads</button>
 </div></div>
@@ -36,9 +45,12 @@
 <div class="current-call" id="currentCall"><div style="display:flex; justify-content:space-between; margin-bottom:12px;"><span class="current-call-title">Currently Calling</span><span class="call-timer" id="callTimer">00:00</span></div><div class="current-call-info"><div class="call-info-item"><span>Name:</span> <strong id="currentName">-</strong></div><div class="call-info-item"><span>Phone:</span> <strong id="currentPhone">-</strong></div><div class="call-info-item"><span>Time:</span> <strong id="currentTime">-</strong></div><div class="call-info-item"><span>Product:</span> <strong id="currentProduct">-</strong></div></div></div>
 <div class="card"><div class="card-header"><span class="card-title">Recent Calls</span><span style="font-size:0.85rem; color:#a1a1aa;" id="recentCount">0 calls</span></div><div class="table-container" style="max-height:250px;"><table><thead><tr><th>Time</th><th>Name</th><th>Status</th><th>Duration</th></tr></thead><tbody id="recentCalls"><tr><td colspan="4" style="text-align:center; color:#a1a1aa; padding:30px;">No calls yet</td></tr></tbody></table></div></div>
 </div></div></div>
-<div class="page" id="page-leads"><div class="card"><div class="card-header"><span class="card-title">Leads Preview</span><span style="color:#90caf9;" id="leadsCount">0 leads</span></div><div class="table-container"><table><thead><tr><th>Appt Time</th><th>Appt Date</th><th>Customer Name</th><th>Phone</th><th>Product</th><th>Status</th></tr></thead><tbody id="leadsTable"><tr><td colspan="6" style="text-align:center; color:#a1a1aa; padding:40px;">Select date and click Preview Leads</td></tr></tbody></table></div></div></div>
-<div class="page" id="page-history"><div class="card"><div class="card-header"><span class="card-title">Call History</span><span style="color:#90caf9;" id="historyCount">0 calls</span></div><div class="table-container"><table><thead><tr><th>Date/Time</th><th>Customer Name</th><th>Phone</th><th>Status</th><th>Duration</th><th>Recording</th></tr></thead><tbody id="callHistory"><tr><td colspan="6" style="text-align:center; color:#a1a1aa; padding:40px;">No call history available</td></tr></tbody></table></div></div></div>
+<div class="page" id="page-leads"><div class="card"><div class="card-header"><span class="card-title">Leads Preview</span><div class="leads-header-controls"><span style="color:#90caf9;" id="leadsCount">0 leads</span><input type="text" id="leadsSearch" placeholder="Search..." class="search-input" onkeyup="filterLeadsTable()"></div></div><div class="table-container"><table><thead><tr><th>Time</th><th>Date</th><th>First Name</th><th>Last Name</th><th>Phone</th><th>Product</th><th>Status</th></tr></thead><tbody id="leadsTable"><tr><td colspan="7" style="text-align:center; color:#a1a1aa; padding:40px;">Select date and click Preview Leads</td></tr></tbody></table></div></div></div>
+<div class="page" id="page-history"><div class="card"><div class="card-header"><span class="card-title">Call History</span><span style="color:#90caf9;" id="historyCount">0 calls</span></div><div class="table-container"><table><thead><tr><th>Date/Time</th><th>Customer</th><th>Phone</th><th>Status</th><th>Duration</th><th>Recording</th><th>Transcript</th></tr></thead><tbody id="callHistory"><tr><td colspan="7" style="text-align:center; color:#a1a1aa; padding:40px;">No call history available</td></tr></tbody></table></div></div></div>
+<div class="page" id="page-texting"><div class="texting-layout"><div class="card threads-panel"><div class="card-header"><span class="card-title">Conversations</span></div><div class="threads-list" id="threadsList"><div style="text-align:center; color:#a1a1aa; padding:20px;">No conversations yet</div></div><button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="newTextMessage()">New Message</button></div><div class="card chat-panel"><div class="card-header"><span class="card-title" id="chatTitle">Select a conversation</span><span style="color:#a1a1aa; font-size:0.85rem;" id="chatPhone"></span></div><div class="chat-messages" id="chatMessages"><div style="text-align:center; color:#a1a1aa; padding:40px;">Select a conversation to view messages</div></div><div class="chat-input-area" id="chatInputArea" style="display:none;"><textarea id="messageInput" placeholder="Type your message..." rows="2"></textarea><button class="btn btn-primary" onclick="sendTextMessage()">Send</button></div></div></div></div>
 </div>
+<div class="modal" id="transcriptModal"><div class="modal-content"><div class="modal-header"><span class="modal-title">Call Transcript</span><button class="modal-close" onclick="closeTranscriptModal()">&times;</button></div><div class="modal-body" id="transcriptContent">Loading...</div></div></div>
+<div class="modal" id="newMessageModal"><div class="modal-content" style="max-width:400px;"><div class="modal-header"><span class="modal-title">New Text Message</span><button class="modal-close" onclick="closeNewMessageModal()">&times;</button></div><div class="modal-body"><div class="form-group"><label>Phone Number</label><input type="tel" id="newMessagePhone" placeholder="+1 (555) 123-4567"></div><div class="form-group"><label>Message</label><textarea id="newMessageText" rows="4" placeholder="Type your message..."></textarea></div><button class="btn btn-primary" style="width:100%;" onclick="sendNewMessage()">Send Message</button></div></div></div>
 <script src="app.js"></script>
 </body>
 </html>

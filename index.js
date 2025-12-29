@@ -120,7 +120,8 @@ app.get('/api/leads', async (req, res) => {
       from: QB_LEADS_TABLE,
       select: [3, 6, 7, 9, 11, 15, 94, 95, 97, 98, 99, 108, 109, 126],
       where: whereClause,
-      sortBy: [{ fieldId: 126, order: 'ASC' }]
+      sortBy: [{ fieldId: 126, order: 'ASC' }],
+      options: { top: 1000, skip: 0 }
     });
 
     const leads = data.data.map(row => ({
@@ -140,9 +141,22 @@ app.get('/api/leads', async (req, res) => {
       zip: row['99']?.value || ''
     }));
 
+    // Apply time filter if provided
+    const { timeFrom, timeTo } = req.query;
+    let filteredLeads = leads;
+    if (timeFrom || timeTo) {
+      filteredLeads = leads.filter(l => {
+        if (!l.appointmentTime) return false;
+        const time = l.appointmentTime;
+        if (timeFrom && time < timeFrom) return false;
+        if (timeTo && time > timeTo) return false;
+        return true;
+      });
+    }
+
     res.json({
-      total: leads.length,
-      leads,
+      total: filteredLeads.length,
+      leads: filteredLeads,
       date,
       dispositions: dispositions ? dispositions.split(',') : []
     });
