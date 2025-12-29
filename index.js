@@ -793,19 +793,48 @@ wss.on('connection', async (twilioWs, req) => {
               console.log('Sent audio to Twilio, length:', audioBase64.length);
             }
           } else if (message.type === 'agent_response') {
-            console.log('Agent says:', JSON.stringify(message.agent_response_event || message));
-            // Store agent transcript
-            if (callSid && message.agent_response_event?.agent_response) {
+            // Handle agent response - check multiple possible paths
+            const agentText = message.agent_response_event?.agent_response
+              || message.agent_response
+              || message.text;
+            console.log('Agent says:', agentText);
+            if (callSid && agentText) {
               if (!callTranscripts.has(callSid)) callTranscripts.set(callSid, []);
-              callTranscripts.get(callSid).push({ speaker: 'Agent', text: message.agent_response_event.agent_response, timestamp: new Date() });
+              callTranscripts.get(callSid).push({ speaker: 'Agent', text: agentText, timestamp: new Date() });
+            }
+          } else if (message.type === 'agent_response_correction') {
+            // Handle corrected agent response (final version)
+            const correctedText = message.agent_response_correction_event?.agent_response
+              || message.agent_response;
+            console.log('Agent corrected:', correctedText);
+            // Update the last agent message if this is a correction
+            if (callSid && correctedText && callTranscripts.has(callSid)) {
+              const transcript = callTranscripts.get(callSid);
+              // Find last agent entry and update it
+              for (let i = transcript.length - 1; i >= 0; i--) {
+                if (transcript[i].speaker === 'Agent') {
+                  transcript[i].text = correctedText;
+                  break;
+                }
+              }
             }
           } else if (message.type === 'user_transcript') {
-            console.log('User said:', JSON.stringify(message.user_transcription_event || message));
-            // Store user transcript
-            const userText = message.user_transcription_event?.user_transcript || message.user_transcript;
-            if (callSid && userText) {
+            // Handle user transcript - check multiple possible paths
+            const userText = message.user_transcription_event?.user_transcript
+              || message.user_transcript
+              || message.text;
+            const isFinal = message.user_transcription_event?.is_final !== false;
+            console.log('User said:', userText, '(final:', isFinal, ')');
+            // Only store final transcripts to avoid duplicates
+            if (callSid && userText && isFinal) {
               if (!callTranscripts.has(callSid)) callTranscripts.set(callSid, []);
               callTranscripts.get(callSid).push({ speaker: 'Customer', text: userText, timestamp: new Date() });
+            }
+          } else if (message.type === 'voicemail_detected') {
+            console.log('Voicemail detected!');
+            if (callSid) {
+              if (!callTranscripts.has(callSid)) callTranscripts.set(callSid, []);
+              callTranscripts.get(callSid).push({ speaker: 'System', text: '[Voicemail detected - leaving message]', timestamp: new Date() });
             }
           } else if (message.type === 'interruption') {
             console.log('Interruption detected');
