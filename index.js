@@ -472,22 +472,11 @@ wss.on('connection', async (twilioWs, req) => {
       ws.on('open', () => {
         console.log('Connected to ElevenLabs WebSocket');
 
-        // Send initial configuration for Twilio audio format (mulaw 8kHz)
+        // Send initial configuration - agent already configured for ulaw_8000
         const config = {
-          type: 'conversation_initiation_client_data',
-          conversation_config_override: {
-            agent: {
-              first_message: "Hi there! This is an AI calling to confirm your upcoming home improvement appointment. Am I speaking with the homeowner?"
-            },
-            asr: {
-              user_input_audio_format: "ulaw_8000"
-            },
-            tts: {
-              agent_output_audio_format: "ulaw_8000"
-            }
-          }
+          type: 'conversation_initiation_client_data'
         };
-        console.log('Sending ElevenLabs config:', JSON.stringify(config));
+        console.log('Sending ElevenLabs init');
         ws.send(JSON.stringify(config));
       });
 
