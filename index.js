@@ -309,15 +309,32 @@ async function initiateAICall(lead, phone) {
 }
 
 // Twilio voice webhook - connects to ElevenLabs
-app.post('/api/voice/connect', (req, res) => {
+app.post('/api/voice/connect', async (req, res) => {
   const leadId = req.query.leadId;
   const lead = callHistory.find(c => c.recordId == leadId) || activeCampaign.currentLead;
 
-  // TwiML to connect call to ElevenLabs websocket
-  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+  try {
+    // Get signed URL from ElevenLabs for Twilio integration
+    const signedUrlResponse = await fetch(
+      `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${ELEVENLABS_AGENT_ID}`,
+      {
+        method: 'GET',
+        headers: {
+          'xi-api-key': ELEVENLABS_API_KEY
+        }
+      }
+    );
+
+    const signedUrlData = await signedUrlResponse.json();
+    const signedUrl = signedUrlData.signed_url;
+
+    console.log('Got signed URL from ElevenLabs:', signedUrl ? 'success' : 'failed');
+
+    // TwiML to connect call to ElevenLabs websocket with signed URL
+    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <Stream url="wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}">
+    <Stream url="${signedUrl}">
       <Parameter name="customer_name" value="${lead?.firstName || 'Customer'}" />
       <Parameter name="appointment_date" value="${lead?.appointmentDate || ''}" />
       <Parameter name="appointment_time" value="${lead?.appointmentTime || ''}" />
@@ -327,8 +344,17 @@ app.post('/api/voice/connect', (req, res) => {
   </Connect>
 </Response>`;
 
-  res.type('text/xml');
-  res.send(twiml);
+    res.type('text/xml');
+    res.send(twiml);
+  } catch (error) {
+    console.error('Error getting signed URL:', error);
+    // Fallback to simple message
+    res.type('text/xml');
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>Sorry, there was an error connecting to the AI agent. Please try again later.</Say>
+</Response>`);
+  }
 });
 
 // Twilio status callback
