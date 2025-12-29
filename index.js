@@ -422,6 +422,39 @@ app.get('/api/calls/history', (req, res) => {
 });
 
 // Health check
+// Test call endpoint - call a specific phone number
+app.post('/api/test-call', async (req, res) => {
+  try {
+    const { phone } = req.body;
+    if (!phone) {
+      return res.status(400).json({ error: 'Phone number required' });
+    }
+
+    let phoneNumber = phone.replace(/\D/g, '');
+    if (phoneNumber.length === 10) phoneNumber = '1' + phoneNumber;
+    if (!phoneNumber.startsWith('+')) phoneNumber = '+' + phoneNumber;
+
+    const publicUrl = getPublicUrl();
+    
+    const call = await twilioClient.calls.create({
+      to: phoneNumber,
+      from: TWILIO_PHONE,
+      url: `${publicUrl}/api/voice/connect?leadId=test`,
+      statusCallback: `${publicUrl}/api/voice/status`,
+      statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed']
+    });
+
+    res.json({
+      success: true,
+      message: `Test call initiated to ${phoneNumber}`,
+      callSid: call.sid
+    });
+  } catch (error) {
+    console.error('Error initiating test call:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
