@@ -375,6 +375,30 @@ app.post('/api/voice/status', (req, res) => {
   res.sendStatus(200);
 });
 
+// Proxy endpoint to serve recordings (avoids Twilio auth requirement)
+app.get('/api/recording/:sid', async (req, res) => {
+  try {
+    const { sid } = req.params;
+    const auth = Buffer.from(`${TWILIO_SID}:${TWILIO_AUTH_TOKEN}`).toString('base64');
+
+    const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Recordings/${sid}.mp3`, {
+      headers: { 'Authorization': `Basic ${auth}` }
+    });
+
+    if (!response.ok) {
+      return res.status(response.status).send('Recording not found');
+    }
+
+    res.set('Content-Type', 'audio/mpeg');
+    const buffer = await response.arrayBuffer();
+    res.send(Buffer.from(buffer));
+  } catch (error) {
+    console.error('Error fetching recording:', error);
+    res.status(500).send('Error fetching recording');
+  }
+});
+
+
 
 // Recording callback
 app.post('/api/voice/recording', async (req, res) => {
@@ -383,7 +407,8 @@ app.post('/api/voice/recording', async (req, res) => {
 
   const call = callHistory.find(c => c.callSid === CallSid);
   if (call) {
-    call.recordingUrl = RecordingUrl + '.mp3';
+    const publicUrl = getPublicUrl();
+    call.recordingUrl = publicUrl + '/api/recording/' + RecordingSid;
     call.recordingSid = RecordingSid;
     call.recordingDuration = RecordingDuration;
     console.log('Recording URL saved:', call.recordingUrl);
@@ -655,19 +680,24 @@ wss.on('connection', async (twilioWs, req) => {
               console.log('Sent audio to Twilio, length:', audioBase64.length);
             }
           } else if (message.type === 'agent_response') {
-            console.log('Agent says:', message.agent_response_event?.agent_response);
+            console.log('Agent says:', JSON.stringify(message.agent_response_event || message));
             // Store agent transcript
             if (callSid && message.agent_response_event?.agent_response) {
               if (!callTranscripts.has(callSid)) callTranscripts.set(callSid, []);
               callTranscripts.get(callSid).push({ speaker: 'Agent', text: message.agent_response_event.agent_response, timestamp: new Date() });
             }
           } else if (message.type === 'user_transcript') {
-            console.log('User said:', message.user_transcription_event?.user_transcript);
+            console.log('User said:', JSON.stringify(message.user_transcription_event || message));
             // Store user transcript
-            if (callSid && message.user_transcription_event?.user_transcript) {
+            const userText = message.user_transcription_event?.user_transcript || message.user_transcript;
+            if (callSid && userText) {
               if (!callTranscripts.has(callSid)) callTranscripts.set(callSid, []);
-              callTranscripts.get(callSid).push({ speaker: 'Customer', text: message.user_transcription_event.user_transcript, timestamp: new Date() });
+              callTranscripts.get(callSid).push({ speaker: 'Customer', text: userText, timestamp: new Date() });
             }
+          } else if (message.type === 'interruption') {
+            console.log('Interruption detected');
+          } else if (message.type === 'internal_vad_score' || message.type === 'internal_turn_probability') {
+            // Voice activity detection - ignore
           } else if (message.type === 'conversation_initiation_metadata') {
             console.log('Conversation initiated:', message.conversation_initiation_metadata_event?.conversation_id);
             elevenLabsReady = true;
