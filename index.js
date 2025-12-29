@@ -470,46 +470,59 @@ wss.on('connection', async (twilioWs, req) => {
       const ws = new WebSocket(data.signed_url);
 
       ws.on('open', () => {
-        console.log('Connected to ElevenLabs');
+        console.log('Connected to ElevenLabs WebSocket');
 
-        // Send initial configuration for Twilio audio format
+        // Send initial configuration for Twilio audio format (mulaw 8kHz)
         const config = {
           type: 'conversation_initiation_client_data',
           conversation_config_override: {
             agent: {
               first_message: "Hi there! This is an AI calling to confirm your upcoming home improvement appointment. Am I speaking with the homeowner?"
             },
+            asr: {
+              user_input_audio_format: "ulaw_8000"
+            },
             tts: {
               agent_output_audio_format: "ulaw_8000"
             }
-          },
-          custom_llm_extra_body: {
-            leadId: leadId
           }
         };
+        console.log('Sending ElevenLabs config:', JSON.stringify(config));
         ws.send(JSON.stringify(config));
       });
 
       ws.on('message', (data) => {
         try {
           const message = JSON.parse(data.toString());
+          console.log('ElevenLabs message type:', message.type);
 
           if (message.type === 'audio') {
-            // Send audio to Twilio
-            if (twilioWs.readyState === WebSocket.OPEN && streamSid) {
+            // Send audio to Twilio - check various possible paths for audio data
+            const audioBase64 = message.audio_event?.audio_base_64
+              || message.audio?.chunk
+              || message.audio_event?.chunk
+              || message.data;
+
+            if (audioBase64 && twilioWs.readyState === WebSocket.OPEN && streamSid) {
               const audioData = {
                 event: 'media',
                 streamSid: streamSid,
                 media: {
-                  payload: message.audio_event?.audio_base_64 || message.audio?.chunk
+                  payload: audioBase64
                 }
               };
               twilioWs.send(JSON.stringify(audioData));
+              console.log('Sent audio to Twilio, length:', audioBase64.length);
             }
           } else if (message.type === 'agent_response') {
-            console.log('Agent:', message.agent_response_event?.agent_response);
+            console.log('Agent says:', message.agent_response_event?.agent_response);
           } else if (message.type === 'user_transcript') {
-            console.log('User:', message.user_transcription_event?.user_transcript);
+            console.log('User said:', message.user_transcription_event?.user_transcript);
+          } else if (message.type === 'conversation_initiation_metadata') {
+            console.log('Conversation initiated:', message.conversation_initiation_metadata_event?.conversation_id);
+          } else if (message.type === 'ping') {
+            // Respond to ping with pong
+            ws.send(JSON.stringify({ type: 'pong' }));
           }
         } catch (err) {
           console.error('Error processing ElevenLabs message:', err);
@@ -540,7 +553,7 @@ wss.on('connection', async (twilioWs, req) => {
           streamSid = msg.start.streamSid;
           callSid = msg.start.callSid;
           leadId = msg.start.customParameters?.leadId;
-          console.log(`Stream started: ${streamSid}, Call: ${callSid}, Lead: ${leadId}`);
+          console.log(`Twilio stream started - StreamSid: ${streamSid}, CallSid: ${callSid}, LeadId: ${leadId}`);
 
           // Connect to ElevenLabs
           elevenLabsWs = await connectToElevenLabs();
@@ -549,6 +562,7 @@ wss.on('connection', async (twilioWs, req) => {
         case 'media':
           // Forward audio to ElevenLabs
           if (elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
+            // Send audio chunk to ElevenLabs
             const audioMessage = {
               user_audio_chunk: msg.media.payload
             };
@@ -556,12 +570,19 @@ wss.on('connection', async (twilioWs, req) => {
           }
           break;
 
+        case 'mark':
+          console.log('Twilio mark received:', msg.mark?.name);
+          break;
+
         case 'stop':
-          console.log('Stream stopped');
+          console.log('Twilio stream stopped');
           if (elevenLabsWs) {
             elevenLabsWs.close();
           }
           break;
+
+        default:
+          console.log('Unknown Twilio event:', msg.event);
       }
     } catch (error) {
       console.error('Error processing Twilio message:', error);
