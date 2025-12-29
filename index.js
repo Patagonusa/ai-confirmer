@@ -673,7 +673,7 @@ wss.on('connection', async (twilioWs, req) => {
                 event: 'media',
                 streamSid: streamSid,
                 media: {
-                  payload: pcm16kToMulaw(audioBase64) || audioBase64
+                  payload: audioBase64  // ElevenLabs outputs ulaw_8000 - send directly
                 }
               };
               twilioWs.send(JSON.stringify(audioData));
@@ -744,8 +744,9 @@ wss.on('connection', async (twilioWs, req) => {
           // Forward audio to ElevenLabs only when ready
           if (elevenLabsReady && elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN) {
             // Send audio chunk to ElevenLabs as base64
+            // ElevenLabs configured for ulaw_8000 - send directly without conversion
             const audioMessage = {
-              user_audio_chunk: (() => { const c = mulawToPcm16k(msg.media.payload); return c ? c : msg.media.payload; })()
+              user_audio_chunk: msg.media.payload
             };
             elevenLabsWs.send(JSON.stringify(audioMessage));
           }
