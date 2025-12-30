@@ -81,6 +81,16 @@ async function qbRequest(endpoint, method = 'GET', body = null) {
   return response.json();
 }
 
+
+// Debug tracking
+const debugInfo = {
+  lastElevenLabsConnection: null,
+  lastElevenLabsError: null,
+  lastTwilioConnection: null,
+  audioChunksSent: 0,
+  audioChunksReceived: 0
+};
+
 // Test endpoint to verify ElevenLabs connection
 app.get('/api/test-elevenlabs', async (req, res) => {
   try {
@@ -107,6 +117,12 @@ app.get('/api/test-elevenlabs', async (req, res) => {
   } catch (error) {
     res.json({ error: error.message });
   }
+});
+
+
+// Debug info endpoint
+app.get('/api/debug', (req, res) => {
+  res.json(debugInfo);
 });
 
 // Get all statuses from Quickbase
@@ -779,6 +795,9 @@ const wss = new WebSocketServer({ server, path: '/media-stream' });
 
 wss.on('connection', async (twilioWs, req) => {
   console.log('Twilio WebSocket connected');
+  debugInfo.lastTwilioConnection = new Date().toISOString();
+  debugInfo.audioChunksSent = 0;
+  debugInfo.audioChunksReceived = 0;
 
   // Get tempId from URL to retrieve lead data
   const urlParams = new URLSearchParams(req.url.split('?')[1] || '');
@@ -817,6 +836,7 @@ wss.on('connection', async (twilioWs, req) => {
 
       ws.on('open', () => {
         console.log('Connected to ElevenLabs WebSocket');
+        debugInfo.lastElevenLabsConnection = new Date().toISOString();
 
         // Send initial configuration with customer data
         // Dynamic variables go at top level, not nested under conversation_config_override
@@ -865,7 +885,8 @@ wss.on('connection', async (twilioWs, req) => {
                 }
               };
               twilioWs.send(JSON.stringify(audioData));
-              console.log('Sent audio to Twilio, length:', audioBase64.length);
+              debugInfo.audioChunksSent++;
+              console.log('Sent audio to Twilio, length:', audioBase64.length, 'total chunks:', debugInfo.audioChunksSent);
             }
           } else if (message.type === 'agent_response') {
             // Handle agent response - check multiple possible paths
@@ -929,6 +950,7 @@ wss.on('connection', async (twilioWs, req) => {
 
       ws.on('error', (error) => {
         console.error('ElevenLabs WebSocket error:', error);
+        debugInfo.lastElevenLabsError = { time: new Date().toISOString(), error: error.message || String(error) };
       });
 
       ws.on('close', () => {
