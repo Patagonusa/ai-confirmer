@@ -81,6 +81,34 @@ async function qbRequest(endpoint, method = 'GET', body = null) {
   return response.json();
 }
 
+// Test endpoint to verify ElevenLabs connection
+app.get('/api/test-elevenlabs', async (req, res) => {
+  try {
+    console.log('Testing ElevenLabs connection...');
+    console.log('ELEVENLABS_AGENT_ID:', ELEVENLABS_AGENT_ID ? 'SET' : 'MISSING');
+    console.log('ELEVENLABS_API_KEY:', ELEVENLABS_API_KEY ? 'SET' : 'MISSING');
+
+    if (!ELEVENLABS_AGENT_ID || !ELEVENLABS_API_KEY) {
+      return res.json({ error: 'Missing ElevenLabs credentials', agentId: !!ELEVENLABS_AGENT_ID, apiKey: !!ELEVENLABS_API_KEY });
+    }
+
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${ELEVENLABS_AGENT_ID}`,
+      { method: 'GET', headers: { 'xi-api-key': ELEVENLABS_API_KEY } }
+    );
+    const data = await response.json();
+
+    res.json({
+      success: !!data.signed_url,
+      signedUrlPresent: !!data.signed_url,
+      agentId: ELEVENLABS_AGENT_ID,
+      error: data.detail || null
+    });
+  } catch (error) {
+    res.json({ error: error.message });
+  }
+});
+
 // Get all statuses from Quickbase
 app.get('/api/statuses', async (req, res) => {
   try {
