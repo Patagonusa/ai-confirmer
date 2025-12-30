@@ -17,6 +17,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Version/Health endpoint for deployment verification
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', version: '1.0.1', timestamp: new Date().toISOString() });
+});
+
 // Configuration
 const PORT = process.env.PORT || 3000;
 
