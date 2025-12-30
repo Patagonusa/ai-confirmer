@@ -1,6 +1,6 @@
 {
   "name": "ai-confirmer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AI Voice Agent for confirming, rescheduling, and cancelling home improvement appointments",
   "main": "index.js",
   "type": "module",
