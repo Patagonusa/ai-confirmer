@@ -120,7 +120,7 @@ app.get('/api/leads', async (req, res) => {
 
     const data = await qbRequest('records/query', 'POST', {
       from: QB_LEADS_TABLE,
-      select: [3, 6, 7, 9, 11, 15, 94, 95, 97, 98, 99, 108, 109, 126],
+      select: [3, 6, 7, 9, 11, 15, 94, 95, 97, 98, 99, 108, 109, 126, 127],
       where: whereClause,
       sortBy: [{ fieldId: 126, order: 'ASC' }],
       options: { top: 1000, skip: 0 }
@@ -150,7 +150,8 @@ app.get('/api/leads', async (req, res) => {
         street: row['95']?.value || '',
         city: row['97']?.value || '',
         state: row['98']?.value || '',
-        zip: row['99']?.value || ''
+        zip: row['99']?.value || '',
+        companyName: row['127']?.value || 'Expert Home Builders'
       };
     });
 
@@ -207,7 +208,7 @@ app.post('/api/campaign/start', async (req, res) => {
 
     const data = await qbRequest('records/query', 'POST', {
       from: QB_LEADS_TABLE,
-      select: [3, 6, 7, 9, 11, 15, 94, 95, 97, 98, 99, 108, 109, 126],
+      select: [3, 6, 7, 9, 11, 15, 94, 95, 97, 98, 99, 108, 109, 126, 127],
       where: whereClause,
       sortBy: [{ fieldId: 126, order: 'ASC' }]
     });
@@ -234,7 +235,8 @@ app.post('/api/campaign/start', async (req, res) => {
         street: row['95']?.value || '',
         city: row['97']?.value || '',
         state: row['98']?.value || '',
-        zip: row['99']?.value || ''
+        zip: row['99']?.value || '',
+        companyName: row['127']?.value || 'Expert Home Builders'
       };
     });
 
@@ -463,6 +465,42 @@ app.post('/api/voice/recording', async (req, res) => {
   }
 
   res.sendStatus(200);
+});
+
+
+// Start campaign with specific selected leads
+app.post('/api/campaign/start-selected', async (req, res) => {
+  try {
+    const { leads: selectedLeads } = req.body;
+
+    if (!selectedLeads || selectedLeads.length === 0) {
+      return res.status(400).json({ error: 'No leads selected' });
+    }
+
+    // Initialize campaign with selected leads
+    activeCampaign.running = true;
+    activeCampaign.totalLeads = selectedLeads.length;
+    activeCampaign.callsMade = 0;
+    activeCampaign.confirmed = 0;
+    activeCampaign.rescheduled = 0;
+    activeCampaign.cancelled = 0;
+    activeCampaign.noAnswer = 0;
+    activeCampaign.leads = selectedLeads;
+    activeCampaign.startTime = new Date();
+
+    res.json({
+      success: true,
+      message: `Campaign started with ${selectedLeads.length} selected leads`,
+      totalLeads: selectedLeads.length
+    });
+
+    // Start calling in background
+    processNextCall();
+
+  } catch (error) {
+    console.error('Error starting campaign with selected leads:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Stop campaign
@@ -758,7 +796,7 @@ wss.on('connection', async (twilioWs, req) => {
             appointment_date: formatDate(currentLead.appointmentDate) || 'your scheduled date',
             appointment_time: formatTime(currentLead.appointmentTime) || 'your scheduled time',
             product: currentLead.product || 'home improvement service',
-            company_name: 'Expert Home Builders',
+            company_name: currentLead.companyName || 'Expert Home Builders',
             record_id: String(currentLead.recordId || ''),
             new_date: '',
             new_time: ''

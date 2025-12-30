@@ -63,11 +63,37 @@ function renderLeadsTable() {
             (l.altPhone||'').includes(search)
         );
     }
-    if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:#a1a1aa">No leads found</td></tr>'; return; }
-    tbody.innerHTML = filtered.map(l => '<tr><td>'+(l.appointmentTime||'-')+'</td><td>'+(l.appointmentDate||'-')+'</td><td>'+(l.fullName || ((l.firstName||'')+ ' ' + (l.lastName||'')).trim() || '-')+'</td><td>'+(l.phone||l.altPhone||'-')+'</td><td>'+(l.product||'-')+'</td><td><span class="status-badge">'+(l.status||'-')+'</span></td></tr>').join('');
+    if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#a1a1aa">No leads found. Click Retrieve Leads first.</td></tr>'; return; }
+    tbody.innerHTML = filtered.map((l, idx) => '<tr><td><input type="checkbox" class="lead-checkbox" data-index="'+idx+'" checked></td><td>'+(l.appointmentTime||'-')+'</td><td>'+(l.appointmentDate||'-')+'</td><td>'+(l.fullName || ((l.firstName||'')+ ' ' + (l.lastName||'')).trim() || '-')+'</td><td>'+(l.phone||l.altPhone||'-')+'</td><td>'+(l.product||'-')+'</td><td>'+(l.companyName||'-')+'</td><td><span class="status-badge">'+(l.status||'-')+'</span></td></tr>').join('');
+    updateSelectedCount();
 }
 
 function filterLeadsTable() { renderLeadsTable(); }
+
+function updateSelectedCount() {
+    const checkboxes = document.querySelectorAll('.lead-checkbox:checked');
+    const countEl = document.getElementById('selectedCount');
+    if (countEl) countEl.textContent = checkboxes.length + ' selected';
+}
+
+function selectAllLeads() {
+    document.querySelectorAll('.lead-checkbox').forEach(cb => cb.checked = true);
+    updateSelectedCount();
+}
+
+function deselectAllLeads() {
+    document.querySelectorAll('.lead-checkbox').forEach(cb => cb.checked = false);
+    updateSelectedCount();
+}
+
+function getSelectedLeads() {
+    const selected = [];
+    document.querySelectorAll('.lead-checkbox:checked').forEach(cb => {
+        const idx = parseInt(cb.dataset.index);
+        if (allLeads[idx]) selected.push(allLeads[idx]);
+    });
+    return selected;
+}
 
 function selectAllDispositions() {
     document.querySelectorAll('#dispositionGrid input[type=checkbox]').forEach(cb => cb.checked = true);
@@ -101,12 +127,14 @@ function renderCallHistory() {
 }
 
 async function startCampaign() {
-    const date = document.getElementById('appointmentDate').value;
-    if (!date) { alert('Please select a date'); return; }
-    const dispositions = Array.from(document.querySelectorAll('#dispositionGrid input:checked')).map(cb => cb.value);
-    if (!dispositions.length) { alert('Please select dispositions'); return; }
+    const selectedLeads = getSelectedLeads();
+    if (!selectedLeads.length) { alert('Please select at least one lead to call'); return; }
     try {
-        const response = await fetch(API_BASE + '/api/campaign/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, dispositions }) });
+        const response = await fetch(API_BASE + '/api/campaign/start-selected', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ leads: selectedLeads })
+        });
         const data = await response.json();
         if (data.success) {
             document.getElementById('startBtn').disabled = true;
@@ -114,8 +142,10 @@ async function startCampaign() {
             document.getElementById('statusDot').classList.add('running');
             document.getElementById('statusText').textContent = 'Running';
             startStatusPolling();
+        } else {
+            alert(data.error || 'Failed to start campaign');
         }
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error(e); alert('Error starting campaign'); }
 }
 
 async function stopCampaign() {
