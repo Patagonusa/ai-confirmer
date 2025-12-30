@@ -819,10 +819,14 @@ wss.on('connection', async (twilioWs, req) => {
 
           if (message.type === 'audio') {
             // Send audio to Twilio - check various possible paths for audio data
+            console.log('AUDIO DEBUG - Full message keys:', Object.keys(message));
+            console.log('AUDIO DEBUG - audio_event:', message.audio_event ? Object.keys(message.audio_event) : 'none');
             const audioBase64 = message.audio_event?.audio_base_64
               || message.audio?.chunk
               || message.audio_event?.chunk
               || message.data;
+            console.log('AUDIO DEBUG - extracted audio length:', audioBase64 ? audioBase64.length : 'NONE');
+            console.log('AUDIO DEBUG - twilioWs ready:', twilioWs.readyState === 1, 'streamSid:', !!streamSid);
 
             if (audioBase64 && twilioWs.readyState === WebSocket.OPEN && streamSid) {
               const audioData = {
